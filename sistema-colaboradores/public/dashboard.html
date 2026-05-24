@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard · Sistema QLP</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div id="toast-container"></div>
+<div class="app-container">
+  <div id="sidebar-placeholder"></div>
+
+  <main class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">Dashboard</div>
+      <div class="topbar-actions">
+        <a href="/cadastro.html" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Novo Colaborador
+        </a>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <!-- Estatísticas -->
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card" style="--accent-color:#2563EB;--accent-bg:#EFF6FF">
+          <div class="spinner" style="width:20px;height:20px;margin:0"></div>
+        </div>
+      </div>
+
+      <!-- Linha com Funções e Cidades -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px" id="charts-row">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Colaboradores por Função</span></div>
+          <div class="card-body" id="funcoes-list"><div class="spinner"></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Por Gênero</span></div>
+          <div class="card-body" id="genero-list"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <!-- Últimos colaboradores -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Colaboradores Recentes</span>
+          <a href="/colaboradores.html" class="btn btn-secondary btn-sm">Ver todos</a>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Nome</th><th>Matrícula</th><th>Função</th>
+                <th>Cidade</th><th>Admissão</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="recent-tbody">
+              <tr><td colspan="6"><div class="spinner"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+document.getElementById('sidebar-placeholder').innerHTML = renderSidebar();
+initSidebar();
+
+async function loadDashboard() {
+  const [stats, recent] = await Promise.all([
+    API.get('/api/estatisticas'),
+    API.get('/api/colaboradores?limit=10')
+  ]);
+
+  // Stats cards
+  const grid = document.getElementById('stats-grid');
+  grid.innerHTML = `
+    <div class="stat-card" style="--accent-color:#2563EB;--accent-bg:#EFF6FF">
+      <div class="stat-label">Total de Colaboradores</div>
+      <div class="stat-value">${stats.total}</div>
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+    </div>
+    <div class="stat-card" style="--accent-color:#059669;--accent-bg:#D1FAE5">
+      <div class="stat-label">Contratados Ativos</div>
+      <div class="stat-value">${stats.ativos}</div>
+      <div class="stat-desc">${stats.total > 0 ? Math.round(stats.ativos/stats.total*100) : 0}% do total</div>
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></div>
+    </div>
+    <div class="stat-card" style="--accent-color:#DC2626;--accent-bg:#FEE2E2">
+      <div class="stat-label">Demitidos</div>
+      <div class="stat-value">${stats.demitidos}</div>
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg></div>
+    </div>
+    <div class="stat-card" style="--accent-color:#D97706;--accent-bg:#FEF3C7">
+      <div class="stat-label">Tipos de Função</div>
+      <div class="stat-value">${Object.keys(stats.funcoes).length}</div>
+      <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2M8 7V5a2 2 0 0 0-4 0v2"/></svg></div>
+    </div>
+  `;
+
+  // Funções
+  const funcoesEl = document.getElementById('funcoes-list');
+  const sortedFuncoes = Object.entries(stats.funcoes).sort((a,b) => b[1]-a[1]).slice(0,8);
+  const maxF = sortedFuncoes[0]?.[1] || 1;
+  funcoesEl.innerHTML = sortedFuncoes.map(([f, n]) => `
+    <div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:13px;font-weight:500">${f}</span>
+        <span style="font-size:12px;color:#64748B">${n}</span>
+      </div>
+      <div style="background:#F1F5F9;border-radius:4px;height:6px">
+        <div style="background:#2563EB;height:100%;border-radius:4px;width:${Math.round(n/maxF*100)}%;transition:width 0.5s"></div>
+      </div>
+    </div>
+  `).join('');
+
+  // Gênero
+  const generoEl = document.getElementById('genero-list');
+  const total = Object.values(stats.generos).reduce((a,b)=>a+b, 0) || 1;
+  const colors = { MASCULINO: '#2563EB', FEMININO: '#EC4899', '': '#94A3B8' };
+  generoEl.innerHTML = Object.entries(stats.generos).map(([g, n]) => `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      <div style="width:12px;height:12px;border-radius:3px;background:${colors[g]||'#94A3B8'};flex-shrink:0"></div>
+      <div style="flex:1">
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+          <span style="font-size:13px;font-weight:500">${g || 'Não informado'}</span>
+          <span style="font-size:12px;color:#64748B">${n} (${Math.round(n/total*100)}%)</span>
+        </div>
+        <div style="background:#F1F5F9;border-radius:4px;height:6px">
+          <div style="background:${colors[g]||'#94A3B8'};height:100%;border-radius:4px;width:${Math.round(n/total*100)}%"></div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // Recentes
+  const tbody = document.getElementById('recent-tbody');
+  if (!recent.items.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><h3>Nenhum colaborador</h3></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = recent.items.map(c => `
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="collab-avatar">${getInitials(c.nome)}</div>
+          <div>
+            <div style="font-weight:600;font-size:14px">${c.nome}</div>
+            <div style="font-size:12px;color:#94A3B8">${c.email || ''}</div>
+          </div>
+        </div>
+      </td>
+      <td><span style="font-family:'JetBrains Mono',monospace;font-size:12px">${c.matricula || '—'}</span></td>
+      <td>${c.funcao || '—'}</td>
+      <td>${c.cidade || '—'}</td>
+      <td>${formatDate(c.admissao)}</td>
+      <td>${statusBadge(c.status)}</td>
+    </tr>
+  `).join('');
+}
+
+loadDashboard();
+</script>
+</body>
+</html>

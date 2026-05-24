@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Colaboradores · Sistema QLP</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div id="toast-container"></div>
+
+<!-- Modal de detalhes -->
+<div class="modal-overlay" id="modal-detalhe">
+  <div class="modal" style="max-width:780px">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-nome">Detalhes do Colaborador</span>
+      <button class="modal-close" onclick="closeModal('modal-detalhe')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="modal-body"><div class="spinner"></div></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-detalhe')">Fechar</button>
+      <button class="btn btn-primary" id="btn-editar-modal">Editar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de edição -->
+<div class="modal-overlay" id="modal-editar">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Editar Colaborador</span>
+      <button class="modal-close" onclick="closeModal('modal-editar')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="modal-editar-body"><div class="spinner"></div></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-editar')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-salvar-edicao">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Salvar
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="app-container">
+  <div id="sidebar-placeholder"></div>
+
+  <main class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">Colaboradores</div>
+      <div class="topbar-actions">
+        <span id="total-count" style="font-size:13px;color:#64748B"></span>
+        <a href="/cadastro.html" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Novo
+        </a>
+      </div>
+    </div>
+
+    <div class="page-content" style="padding-top:0">
+      <div class="card" style="margin-top:28px">
+        <!-- Filtros -->
+        <div class="filters-bar">
+          <div class="search-bar" style="max-width:360px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" id="search-input" placeholder="Buscar por nome, matrícula, CPF, função…">
+          </div>
+          <select class="form-control" id="filter-status" style="width:auto;padding:10px 14px">
+            <option value="">Todos os status</option>
+            <option value="contratado">Contratados</option>
+            <option value="demitido">Demitidos</option>
+          </select>
+          <button class="btn btn-secondary" id="btn-limpar">Limpar filtros</button>
+        </div>
+
+        <!-- Tabela -->
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Colaborador</th>
+                <th>Matrícula</th>
+                <th>Função</th>
+                <th>Cidade / UF</th>
+                <th>Admissão</th>
+                <th>Telefone</th>
+                <th>Status</th>
+                <th style="text-align:right">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="colaboradores-tbody">
+              <tr><td colspan="8"><div class="spinner"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Paginação -->
+        <div class="pagination" id="pagination"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+document.getElementById('sidebar-placeholder').innerHTML = renderSidebar();
+initSidebar();
+
+let currentPage = 1;
+let searchTimer = null;
+let editingId = null;
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+async function loadColaboradores() {
+  const search = document.getElementById('search-input').value;
+  const status = document.getElementById('filter-status').value;
+  const tbody = document.getElementById('colaboradores-tbody');
+  tbody.innerHTML = `<tr><td colspan="8"><div class="spinner"></div></td></tr>`;
+
+  try {
+    const data = await API.get(`/api/colaboradores?search=${encodeURIComponent(search)}&status=${status}&page=${currentPage}&limit=25`);
+    document.getElementById('total-count').textContent = `${data.total} colaborador${data.total !== 1 ? 'es' : ''}`;
+
+    if (!data.items.length) {
+      tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <h3>Nenhum colaborador encontrado</h3>
+        <p>Tente ajustar os filtros de pesquisa</p>
+      </div></td></tr>`;
+    } else {
+      tbody.innerHTML = data.items.map(c => `
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:10px">
+              <div class="collab-avatar">${getInitials(c.nome)}</div>
+              <div>
+                <div style="font-weight:600">${c.nome}</div>
+                <div style="font-size:12px;color:#94A3B8">${c.cpf || ''}</div>
+              </div>
+            </div>
+          </td>
+          <td><span style="font-family:'JetBrains Mono',monospace;font-size:12px;background:#F1F5F9;padding:2px 8px;border-radius:4px">${c.matricula || '—'}</span></td>
+          <td style="font-size:13px">${c.funcao || '—'}</td>
+          <td style="font-size:13px">${c.cidade ? `${c.cidade}/${c.uf || ''}` : '—'}</td>
+          <td style="font-size:13px">${formatDate(c.admissao)}</td>
+          <td style="font-size:13px">${c.telefone || '—'}</td>
+          <td>${statusBadge(c.status)}</td>
+          <td>
+            <div style="display:flex;gap:6px;justify-content:flex-end">
+              <button class="btn btn-secondary btn-sm" onclick="verDetalhe(${c._id})" title="Ver detalhes">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+              <button class="btn btn-primary btn-sm" onclick="abrirEditar(${c._id})" title="Editar" id="btn-edit-role">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="excluirColaborador(${c._id}, '${c.nome.replace(/'/g,"\\'")}')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    renderPagination(data.total, data.totalPages, currentPage);
+
+    // Esconder botões conforme papel do usuário
+    if (window._currentUser && window._currentUser.role === 'viewer') {
+      document.querySelectorAll('#btn-edit-role, .btn-danger').forEach(b => b.style.display = 'none');
+    }
+
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="8" style="color:red;text-align:center">${e.message}</td></tr>`;
+  }
+}
+
+function renderPagination(total, totalPages, page) {
+  const el = document.getElementById('pagination');
+  if (totalPages <= 1) { el.innerHTML = `<div class="pagination-info">${total} resultado${total !== 1 ? 's' : ''}</div>`; return; }
+  let btns = '';
+  const start = Math.max(1, page - 2);
+  const end = Math.min(totalPages, page + 2);
+  if (start > 1) btns += `<button class="page-btn" onclick="goPage(1)">1</button>`;
+  if (start > 2) btns += `<span style="padding:0 4px;color:#94A3B8">…</span>`;
+  for (let i = start; i <= end; i++) btns += `<button class="page-btn ${i === page ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
+  if (end < totalPages - 1) btns += `<span style="padding:0 4px;color:#94A3B8">…</span>`;
+  if (end < totalPages) btns += `<button class="page-btn" onclick="goPage(${totalPages})">${totalPages}</button>`;
+  el.innerHTML = `<div class="pagination-info">${total} colaboradores — página ${page} de ${totalPages}</div>${btns}`;
+}
+
+function goPage(p) { currentPage = p; loadColaboradores(); }
+
+async function verDetalhe(id) {
+  document.getElementById('modal-detalhe').classList.add('open');
+  document.getElementById('modal-body').innerHTML = '<div class="spinner"></div>';
+  const c = await API.get(`/api/colaboradores/${id}`);
+  document.getElementById('modal-nome').textContent = c.nome;
+  document.getElementById('btn-editar-modal').onclick = () => { closeModal('modal-detalhe'); abrirEditar(id); };
+
+  const fields = [
+    ['Matrícula', c.matricula], ['CPF', c.cpf], ['RG', c.rg], ['PIS', c.pis],
+    null,
+    ['Função', c.funcao], ['Admissão', formatDate(c.admissao)], ['Status', c.status], ['Gênero', c.genero],
+    null,
+    ['Nascimento', formatDate(c.nascimento)], ['Naturalidade', c.naturalidade], ['Estado Civil', c.estadoCivil],
+    ['Nome do Pai', c.nomePai], ['Nome da Mãe', c.nomeMae],
+    null,
+    ['Telefone', c.telefone], ['E-mail', c.email],
+    null,
+    ['Endereço', c.endereco], ['Número', c.numero], ['Bairro', c.bairro],
+    ['Cidade', c.cidade], ['UF', c.uf], ['CEP', c.cep],
+    null,
+    ['Categoria CNH', c.categoria], ['RENACH', c.renach], ['Estado CNH', c.estadoCnh],
+    ['Venc. CNH', formatDate(c.vencimentoCnh)],
+    null,
+    ['Operação', c.operacao], ['Horário', c.horario], ['Safra/Novo', c.safraNovo],
+    ['Link Pasta', c.linkPasta ? `<a href="${c.linkPasta}" target="_blank" style="color:#2563EB">${c.linkPasta}</a>` : '—']
+  ];
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="detail-grid">
+      ${fields.map(f => f === null
+        ? '<hr class="detail-divider">'
+        : `<div class="detail-item">
+            <span class="detail-label">${f[0]}</span>
+            <span class="detail-value">${f[1] || '—'}</span>
+          </div>`
+      ).join('')}
+    </div>`;
+}
+
+async function abrirEditar(id) {
+  if (window._currentUser?.role === 'viewer') { showToast('error', 'Sem permissão', 'Você não pode editar colaboradores.'); return; }
+  document.getElementById('modal-editar').classList.add('open');
+  document.getElementById('modal-editar-body').innerHTML = '<div class="spinner"></div>';
+  editingId = id;
+
+  const c = await API.get(`/api/colaboradores/${id}`);
+  document.getElementById('modal-editar-body').innerHTML = buildEditForm(c);
+  document.getElementById('btn-salvar-edicao').onclick = () => salvarEdicao(id);
+}
+
+function buildEditForm(c) {
+  const field = (label, key, type = 'text') =>
+    `<div class="form-group">
+      <label class="form-label">${label}</label>
+      <input type="${type}" class="form-control" name="${key}" value="${(c[key] || '').replace(/"/g, '&quot;')}">
+    </div>`;
+  const sel = (label, key, opts) =>
+    `<div class="form-group">
+      <label class="form-label">${label}</label>
+      <select class="form-control" name="${key}">
+        ${opts.map(o => `<option value="${o}" ${c[key]===o?'selected':''}>${o}</option>`).join('')}
+      </select>
+    </div>`;
+
+  return `<div class="form-grid">
+    ${field('Nome Completo', 'nome')}
+    ${field('Matrícula', 'matricula')}
+    ${field('CPF', 'cpf')}
+    ${field('RG', 'rg')}
+    ${field('PIS', 'pis')}
+    ${field('Admissão', 'admissao', 'date')}
+    ${field('Função', 'funcao')}
+    ${sel('Status', 'status', ['CONTRATADO','DEMITIDO'])}
+    ${sel('Gênero', 'genero', ['MASCULINO','FEMININO',''])}
+    ${sel('Estado Civil', 'estadoCivil', ['CASADO','SOLTEIRO','DIVORCIADO','VIÚVO','UNIÃO ESTÁVEL',''])}
+    ${field('Nascimento', 'nascimento', 'date')}
+    ${field('Naturalidade', 'naturalidade')}
+    ${field('Nome do Pai', 'nomePai')}
+    ${field('Nome da Mãe', 'nomeMae')}
+    ${field('Telefone', 'telefone')}
+    ${field('E-mail', 'email', 'email')}
+    ${field('Endereço', 'endereco')}
+    ${field('Número', 'numero')}
+    ${field('Bairro', 'bairro')}
+    ${field('Cidade', 'cidade')}
+    ${field('UF', 'uf')}
+    ${field('CEP', 'cep')}
+    ${field('Categoria CNH', 'categoria')}
+    ${field('RENACH', 'renach')}
+    ${field('Estado CNH', 'estadoCnh')}
+    ${field('Vencimento CNH', 'vencimentoCnh', 'date')}
+    ${field('Operação', 'operacao')}
+    ${field('Horário', 'horario')}
+    ${sel('Safra/Novo', 'safraNovo', ['NOVO','SAFRA',''])}
+    ${field('Link Pasta', 'linkPasta')}
+    ${field('ASO', 'aso', 'date')}
+    ${field('Demissão', 'demissao', 'date')}
+  </div>`;
+}
+
+async function salvarEdicao(id) {
+  const form = document.getElementById('modal-editar-body');
+  const inputs = form.querySelectorAll('[name]');
+  const data = {};
+  inputs.forEach(i => { data[i.name] = i.value; });
+  try {
+    await API.put(`/api/colaboradores/${id}`, data);
+    showToast('success', 'Salvo!', 'Colaborador atualizado com sucesso.');
+    closeModal('modal-editar');
+    loadColaboradores();
+  } catch(e) {
+    showToast('error', 'Erro ao salvar', e.message);
+  }
+}
+
+async function excluirColaborador(id, nome) {
+  if (window._currentUser?.role !== 'admin') { showToast('error', 'Sem permissão', 'Somente administradores podem excluir.'); return; }
+  if (!confirm(`Confirma a exclusão de "${nome}"? Esta ação não pode ser desfeita.`)) return;
+  try {
+    await API.delete(`/api/colaboradores/${id}`);
+    showToast('success', 'Excluído!', `${nome} foi removido.`);
+    loadColaboradores();
+  } catch(e) {
+    showToast('error', 'Erro ao excluir', e.message);
+  }
+}
+
+// Busca com debounce
+document.getElementById('search-input').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { currentPage = 1; loadColaboradores(); }, 400);
+});
+document.getElementById('filter-status').addEventListener('change', () => { currentPage = 1; loadColaboradores(); });
+document.getElementById('btn-limpar').addEventListener('click', () => {
+  document.getElementById('search-input').value = '';
+  document.getElementById('filter-status').value = '';
+  currentPage = 1; loadColaboradores();
+});
+
+loadColaboradores();
+</script>
+</body>
+</html>

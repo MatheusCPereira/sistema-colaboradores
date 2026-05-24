@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Usuários · Sistema QLP</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div id="toast-container"></div>
+
+<!-- Modal novo/editar usuário -->
+<div class="modal-overlay" id="modal-usuario">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-user-title">Novo Usuário</span>
+      <button class="modal-close" onclick="document.getElementById('modal-usuario').classList.remove('open')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid" style="grid-template-columns:1fr">
+        <div class="form-group">
+          <label class="form-label required">Nome</label>
+          <input type="text" class="form-control" id="u-name" placeholder="Nome do usuário">
+        </div>
+        <div class="form-group">
+          <label class="form-label required">Login (usuário)</label>
+          <input type="text" class="form-control" id="u-username" placeholder="login de acesso">
+        </div>
+        <div class="form-group">
+          <label class="form-label" id="u-pass-label">Senha</label>
+          <input type="password" class="form-control" id="u-password" placeholder="Deixe em branco para manter">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Perfil de Acesso</label>
+          <select class="form-control" id="u-role">
+            <option value="viewer">Visualizador — só consulta</option>
+            <option value="editor">Editor — consulta e edita</option>
+            <option value="admin">Administrador — acesso total</option>
+          </select>
+        </div>
+        <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:12px;font-size:13px;color:#92400E">
+          <strong>Perfis:</strong><br>
+          🔵 <b>Visualizador</b> — apenas consulta colaboradores<br>
+          🟡 <b>Editor</b> — consulta, cadastra e edita<br>
+          🔴 <b>Admin</b> — tudo, incluindo excluir e gerenciar usuários
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="document.getElementById('modal-usuario').classList.remove('open')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-salvar-usuario">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+        Salvar
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="app-container">
+  <div id="sidebar-placeholder"></div>
+
+  <main class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">Gerenciar Usuários</div>
+      <div class="topbar-actions">
+        <button class="btn btn-primary" id="btn-novo-usuario">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Novo Usuário
+        </button>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="card" style="margin-bottom:20px;background:#EFF6FF;border-color:#BFDBFE">
+        <div class="card-body" style="padding:16px 20px">
+          <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:#1E40AF">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+            <span>Esta página é restrita a <strong>Administradores</strong>. Gerencie aqui todos os usuários com acesso ao sistema.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Usuários do Sistema</span>
+          <span id="user-count" style="font-size:13px;color:#64748B"></span>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Usuário</th>
+                <th>Login</th>
+                <th>Perfil</th>
+                <th>Criado em</th>
+                <th style="text-align:right">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody">
+              <tr><td colspan="5"><div class="spinner"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+document.getElementById('sidebar-placeholder').innerHTML = renderSidebar();
+initSidebar();
+
+let editingUserId = null;
+
+const roleLabels = {
+  admin: { label: 'Administrador', class: 'badge-danger' },
+  editor: { label: 'Editor', class: 'badge-warning' },
+  viewer: { label: 'Visualizador', class: 'badge-info' }
+};
+
+async function loadUsers() {
+  const tbody = document.getElementById('users-tbody');
+  try {
+    const users = await API.get('/api/usuarios');
+    document.getElementById('user-count').textContent = `${users.length} usuário${users.length !== 1 ? 's' : ''}`;
+    if (!users.length) {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><h3>Nenhum usuário</h3></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = users.map(u => {
+      const role = roleLabels[u.role] || { label: u.role, class: 'badge-gray' };
+      return `<tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="user-avatar" style="color:#2563EB">${getInitials(u.name)}</div>
+            <span style="font-weight:600">${u.name}</span>
+          </div>
+        </td>
+        <td><span style="font-family:'JetBrains Mono',monospace;font-size:12px;background:#F1F5F9;padding:2px 8px;border-radius:4px">${u.username}</span></td>
+        <td><span class="badge ${role.class}">${role.label}</span></td>
+        <td style="font-size:13px">${u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '—'}</td>
+        <td>
+          <div style="display:flex;gap:6px;justify-content:flex-end">
+            <button class="btn btn-primary btn-sm" onclick="editUser('${u.id}', '${u.name.replace(/'/g,"\\'")}', '${u.username}', '${u.role}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Editar
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}', '${u.name.replace(/'/g,"\\'")}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="5" style="color:red;text-align:center">${e.message}</td></tr>`;
+  }
+}
+
+function openNovoModal() {
+  editingUserId = null;
+  document.getElementById('modal-user-title').textContent = 'Novo Usuário';
+  document.getElementById('u-name').value = '';
+  document.getElementById('u-username').value = '';
+  document.getElementById('u-password').value = '';
+  document.getElementById('u-role').value = 'viewer';
+  document.getElementById('u-pass-label').textContent = 'Senha *';
+  document.getElementById('modal-usuario').classList.add('open');
+}
+
+function editUser(id, name, username, role) {
+  editingUserId = id;
+  document.getElementById('modal-user-title').textContent = 'Editar Usuário';
+  document.getElementById('u-name').value = name;
+  document.getElementById('u-username').value = username;
+  document.getElementById('u-password').value = '';
+  document.getElementById('u-role').value = role;
+  document.getElementById('u-pass-label').textContent = 'Nova Senha (opcional)';
+  document.getElementById('modal-usuario').classList.add('open');
+}
+
+async function salvarUsuario() {
+  const name = document.getElementById('u-name').value.trim();
+  const username = document.getElementById('u-username').value.trim();
+  const password = document.getElementById('u-password').value;
+  const role = document.getElementById('u-role').value;
+
+  if (!name || !username) { showToast('error', 'Preencha nome e login.'); return; }
+  if (!editingUserId && !password) { showToast('error', 'Informe a senha.'); return; }
+
+  const data = { name, username, role };
+  if (password) data.password = password;
+
+  try {
+    if (editingUserId) {
+      await API.put(`/api/usuarios/${editingUserId}`, data);
+      showToast('success', 'Usuário atualizado!');
+    } else {
+      await API.post('/api/usuarios', data);
+      showToast('success', 'Usuário criado!', `${name} já pode fazer login.`);
+    }
+    document.getElementById('modal-usuario').classList.remove('open');
+    loadUsers();
+  } catch(e) {
+    showToast('error', 'Erro', e.message);
+  }
+}
+
+async function deleteUser(id, name) {
+  if (!confirm(`Excluir o usuário "${name}"?`)) return;
+  try {
+    await API.delete(`/api/usuarios/${id}`);
+    showToast('success', 'Usuário excluído!');
+    loadUsers();
+  } catch(e) {
+    showToast('error', 'Erro ao excluir', e.message);
+  }
+}
+
+document.getElementById('btn-novo-usuario').addEventListener('click', openNovoModal);
+document.getElementById('btn-salvar-usuario').addEventListener('click', salvarUsuario);
+
+loadUsers();
+</script>
+</body>
+</html>
